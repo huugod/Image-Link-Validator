@@ -7,6 +7,8 @@ interface ItemCardProps {
   item: Item;
   onUrlChange: (internalId: string, newUrl: string) => void;
   onRecheck: (internalId: string) => void;
+  onImageLoad: (internalId: string) => void;
+  onImageError: (internalId: string) => void;
   isHighlighted?: boolean;
 }
 
@@ -24,7 +26,7 @@ const StatusIndicator: React.FC<{ status: ItemStatus }> = ({ status }) => {
 };
 
 
-export const ItemCard: React.FC<ItemCardProps> = ({ item, onUrlChange, onRecheck, isHighlighted }) => {
+export const ItemCard: React.FC<ItemCardProps> = ({ item, onUrlChange, onRecheck, onImageLoad, onImageError, isHighlighted }) => {
   const [currentUrl, setCurrentUrl] = useState(item.url);
   const [isEditing, setIsEditing] = useState(false);
 
@@ -49,26 +51,36 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onUrlChange, onRecheck
     window.open(searchUrl, '_blank', 'noopener,noreferrer');
   };
 
+  const showImage = item.status === ItemStatus.OK;
+  const showSpinner = item.status === ItemStatus.CHECKING;
+  const showErrorOverlay = item.status === ItemStatus.ERROR;
+
   return (
     <div 
         id={`item-${item.internalId}`}
         className={`bg-gray-800 rounded-lg overflow-hidden shadow-lg transition-all duration-300 flex flex-col ${isHighlighted ? 'ring-2 ring-red-500' : 'hover:shadow-cyan-500/20 hover:ring-2 hover:ring-cyan-500/50'}`}
     >
       <div className="relative w-full h-48 bg-gray-700">
-        {item.status === ItemStatus.CHECKING && (
+        {/* The image is always mounted when a check is needed to trigger loading events */}
+        {item.status !== ItemStatus.IDLE && (
+            <img 
+                key={item.url} // Re-triggers load if URL changes
+                src={item.url} 
+                alt={item.name} 
+                className={`w-full h-full object-cover transition-opacity duration-300 ${showImage ? 'opacity-100' : 'opacity-0'}`}
+                referrerPolicy="no-referrer"
+                onLoad={() => onImageLoad(item.internalId)}
+                onError={() => onImageError(item.internalId)}
+            />
+        )}
+
+        {showSpinner && (
           <div className="absolute inset-0 flex items-center justify-center">
             <SpinnerIcon className="w-10 h-10 text-cyan-400" />
           </div>
         )}
-        {(item.status === ItemStatus.OK || item.status === ItemStatus.ERROR) && (
-          <img 
-            src={item.url} 
-            alt={item.name} 
-            className="w-full h-full object-cover" 
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-          />
-        )}
-         {item.status === ItemStatus.ERROR && (
+
+        {showErrorOverlay && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-800 bg-opacity-75 p-4">
                 <div className="text-center text-red-400">
                     <XCircleIcon className="w-12 h-12 mx-auto" />

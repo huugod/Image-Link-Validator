@@ -156,21 +156,19 @@ const App: React.FC = () => {
     return newItems;
   };
 
-
-  const checkImage = (url: string): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (!url || typeof url !== 'string' || !url.startsWith('http')) {
-        resolve(false);
-        return;
-      }
-      const img = new Image();
-      img.onload = () => resolve(true);
-      img.onerror = () => resolve(false);
-      img.src = url;
-    });
+  const handleImageLoad = (internalId: string) => {
+    setItems(current => current.map(i => 
+      (i.internalId === internalId && i.status === ItemStatus.CHECKING) ? { ...i, status: ItemStatus.OK } : i
+    ));
   };
 
-  const processAndCheckLinks = async () => {
+  const handleImageError = (internalId: string) => {
+    setItems(current => current.map(i => 
+      (i.internalId === internalId && i.status === ItemStatus.CHECKING) ? { ...i, status: ItemStatus.ERROR } : i
+    ));
+  };
+
+  const processAndCheckLinks = () => {
     if (isProcessing) return;
     setIsProcessing(true);
     setHighlightedItemId(null);
@@ -178,29 +176,12 @@ const App: React.FC = () => {
     
     const parsedItems = parseAndSetItems();
     setItems(parsedItems.map(item => ({ ...item, status: ItemStatus.CHECKING })));
-
-    // Use Promise.all for parallel checking
-    const checkPromises = parsedItems.map(async (item) => {
-        const isOk = await checkImage(item.url);
-        return { internalId: item.internalId, status: isOk ? ItemStatus.OK : ItemStatus.ERROR };
-    });
-
-    // Stagger updates to avoid re-rendering bottleneck
-    for (const promise of checkPromises) {
-        const result = await promise;
-        setItems(current => current.map(i => i.internalId === result.internalId ? { ...i, status: result.status } : i));
-    }
     
     setIsProcessing(false);
   };
     
-  const handleRecheck = async (internalId: string) => {
-    const itemToCheck = items.find(i => i.internalId === internalId);
-    if (!itemToCheck) return;
-
+  const handleRecheck = (internalId: string) => {
     setItems(current => current.map(i => i.internalId === internalId ? { ...i, status: ItemStatus.CHECKING } : i));
-    const isOk = await checkImage(itemToCheck.url);
-    setItems(current => current.map(i => i.internalId === internalId ? { ...i, status: isOk ? ItemStatus.OK : ItemStatus.ERROR } : i));
   };
 
   const handleUrlChange = (internalId: string, newUrl: string) => {
@@ -235,15 +216,13 @@ const App: React.FC = () => {
         if (i.originalLine === item.originalLine) {
             newItem = { ...newItem, originalLine: newLine };
         }
-        // Update the specific item's URL
+        // Update the specific item's URL and set status to CHECKING
         if (i.internalId === internalId) {
-            newItem = { ...newItem, url: newUrl, status: ItemStatus.IDLE };
+            newItem = { ...newItem, url: newUrl, status: ItemStatus.CHECKING };
         }
         return newItem;
       })
     );
-    
-    setTimeout(() => handleRecheck(internalId), 10);
   };
     
   const handleBulkReplace = () => {
@@ -264,23 +243,12 @@ const App: React.FC = () => {
         ...item,
         url: newUrl,
         originalLine: newLine, 
-        status: ItemStatus.IDLE
+        status: ItemStatus.CHECKING // Set to checking for re-validation
       };
     });
     
     setRawText(newRawText);
     setItems(updatedItems);
-  
-    setTimeout(async () => {
-      setIsProcessing(true);
-      const itemsToCheck = updatedItems.filter(i => i.status === ItemStatus.IDLE);
-      for (const item of itemsToCheck) {
-        setItems(current => current.map(i => i.internalId === item.internalId ? { ...i, status: ItemStatus.CHECKING } : i));
-        const isOk = await checkImage(item.url);
-        setItems(current => current.map(i => i.internalId === item.internalId ? { ...i, status: isOk ? ItemStatus.OK : ItemStatus.ERROR } : i));
-      }
-      setIsProcessing(false);
-    }, 10);
   };
 
   const handleReplaceErrors = () => {
@@ -306,23 +274,12 @@ const App: React.FC = () => {
         if (newLine) {
             let updatedItem = { ...item, originalLine: newLine };
             if (item.status === ItemStatus.ERROR) {
-                updatedItem = { ...updatedItem, url: errorReplaceUrl, status: ItemStatus.IDLE };
+                updatedItem = { ...updatedItem, url: errorReplaceUrl, status: ItemStatus.CHECKING };
             }
             return updatedItem;
         }
         return item;
     }));
-
-    setTimeout(async () => {
-        setIsProcessing(true);
-        const itemsToCheck = items.filter(i => i.status === ItemStatus.ERROR);
-        for (const item of itemsToCheck) {
-            setItems(current => current.map(i => i.internalId === item.internalId ? { ...i, status: ItemStatus.CHECKING } : i));
-            const isOk = await checkImage(errorReplaceUrl);
-            setItems(current => current.map(i => i.internalId === item.internalId ? { ...i, status: isOk ? ItemStatus.OK : ItemStatus.ERROR } : i));
-        }
-        setIsProcessing(false);
-    }, 10);
   };
 
   const handleCopy = () => {
@@ -540,6 +497,8 @@ const App: React.FC = () => {
                     item={item} 
                     onUrlChange={handleUrlChange}
                     onRecheck={handleRecheck}
+                    onImageLoad={handleImageLoad}
+                    onImageError={handleImageError}
                     isHighlighted={item.internalId === highlightedItemId}
                 />
                 ))}
