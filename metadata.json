@@ -1,0 +1,5 @@
+{
+  "name": "Image Link Validator",
+  "description": "An efficient tool to paste structured data containing image URLs, validate each link, and perform bulk or individual replacements. Perfect for developers and content managers handling asset links in scripts or configurations.",
+  "requestFramePermissions": []
+}
